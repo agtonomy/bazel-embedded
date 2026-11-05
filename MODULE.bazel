@@ -1,0 +1,47 @@
+"""Bazel embedded: toolchains and tools for embedded targets."""
+
+module(
+    name = "bazel_embedded",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "bazel_skylib", version = "1.7.1")
+
+# Used by //tools/serial:serial_wrapper.
+bazel_dep(name = "cxxopts", version = "3.0.0", repo_name = "com_github_jarro_cxxopts")
+bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "rules_cc", version = "0.1.1")
+
+# Only needed to build the documentation targets in tools/openocd.
+bazel_dep(name = "stardoc", version = "0.7.2", repo_name = "io_bazel_stardoc", dev_dependency = True)
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# Used by //tools/serial:serial_wrapper.
+http_archive(
+    name = "com_github_wjwwood_serial",
+    sha256 = "55381e43ddf0920c955994fa5f519f95e867ea4e4280a2cf55c4dfd3266b19c0",
+    strip_prefix = "serial-8068164faa1a48e18deaf6a15db7950a09b30b9e",
+    urls = ["https://github.com/silvergasp/serial/archive/8068164faa1a48e18deaf6a15db7950a09b30b9e.zip"],
+)
+
+# Select the arm-none-eabi gcc release from the root module with:
+#
+#   bazel_embedded = use_extension("@bazel_embedded//:extensions.bzl", "bazel_embedded")
+#   bazel_embedded.gcc_arm_none(version = "9")
+bazel_embedded = use_extension("//:extensions.bzl", "bazel_embedded")
+use_repo(
+    bazel_embedded,
+    "bazel_embedded_upstream_toolchain",
+    "gcc_arm_none_eabi_compiler",
+    "com_openocd",
+)
+
+register_execution_platforms(
+    "@platforms//host",
+    "//platforms:all",
+)
+
+# The toolchain() targets live in a package that doesn't load the compiler repository, so the compiler is only
+# downloaded when one of these toolchains is selected.
+register_toolchains("//toolchains/gcc_arm_none_eabi/registry:all")

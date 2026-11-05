@@ -23,6 +23,20 @@
 load("//toolchains/compilers/gcc_arm_none_eabi/impl:gcc_arm_none_versions.bzl", "TOOLCHAIN_VERSIONS", "get_platform_specific_config")
 load("//toolchains/tools/include_tools:include_tools.bzl", "include_tools")
 
+# The (wrapper name, arm-none-eabi binary, extra arguments) of the wrappers generated into the repository. The wrapper
+# names are the tool names of the cc_toolchain.
+_WRAPPERS = [
+    ("gcc", "gcc", "-fdiagnostics-color=always"),
+    ("cpp", "g++", "-fdiagnostics-color=always"),
+    ("ar", "ar", ""),
+    ("gcov", "gcov", ""),
+    ("ld", "ld", ""),
+    ("nm", "nm", ""),
+    ("objcopy", "objcopy", ""),
+    ("objdump", "objdump", ""),
+    ("strip", "strip", ""),
+]
+
 def _com_gcc_arm_none_repository_impl(repository_ctx):
     version = repository_ctx.attr.version
     remote_toolchain_info = get_platform_specific_config(version, repository_ctx.os.name)
@@ -62,17 +76,34 @@ SYSTEM_INCLUDE_PATHS = {}
 """.format(include_bazel_template_input, include_paths_template_input),
     )
 
+    wrapper_extension = ".bat" if os == "windows" else ".sh"
+    for tool, real_binary, extra_args in _WRAPPERS:
+        repository_ctx.template(
+            "wrappers/" + tool + (".bat" if os == "windows" else ""),
+            Label("//toolchains/gcc_arm_none_eabi:wrapper" + wrapper_extension + ".tpl"),
+            substitutions = {
+                "%{extra_args}%": extra_args,
+                "%{real_binary}%": "arm-none-eabi-" + real_binary + postfix,
+            },
+            executable = True,
+        )
+
     repository_ctx.file(
         "BUILD",
         """
+load("@bazel_embedded//toolchains/gcc_arm_none_eabi:gcc_arm_none_toolchain.bzl", "gcc_arm_none_toolchains")
+
+package(default_visibility = ["//visibility:public"])
+
 filegroup(
     name = "all",
     srcs = glob(["**/*"],exclude=["**/*.html","**/*.pdf"]),
-    visibility = ['//visibility:public'],
 )
 exports_files(
     glob(["bin/**"])
 )
+
+gcc_arm_none_toolchains()
 """,
     )
 
@@ -89,5 +120,5 @@ gcc_arm_none_repository = repository_rule(
 
 def gcc_arm_none_compiler():
     gcc_arm_none_repository(
-        name = "com_gcc_arm_none_eabi_compiler",
+        name = "gcc_arm_none_eabi_compiler",
     )

@@ -20,27 +20,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-load("//devices/arm:cortex_m.bzl", "CORTEX_M_DEVICE_CONFIGS")
-load(
-    ":gcc_arm_none_toolchain.bzl",
-    "compiler_components",
-    "gcc_arm_none_toolchain",
-)
-
 package(default_visibility = ["//visibility:public"])
 
-_DEVICE_CONFIGS = CORTEX_M_DEVICE_CONFIGS
-
-compiler_components(
-    injected_hdr_deps = "@bazel_embedded_upstream_toolchain//:injected_headers",
-    system_hdr_deps = "@bazel_embedded_upstream_toolchain//:polyfill",
-)
-
-[gcc_arm_none_toolchain(
-    name = "arm_none_eabi_" + cfg.cpu + "_" + cfg.fpu,
-    architecture = cfg.cpu,
-    compiler_components = ":compiler_components",
-    endian = cfg.endian,
-    float_abi = cfg.float_abi,
-    fpu = cfg.fpu,
-) for cfg in _DEVICE_CONFIGS]
+# Templates for the compiler wrappers that gcc_arm_none_repository generates. The cc_toolchain targets are declared in
+# the generated compiler repository (see gcc_arm_none_toolchains) and the toolchain() targets in //toolchains/gcc_arm_none_eabi/registry.
+exports_files([
+    "wrapper.bat.tpl",
+    "wrapper.sh.tpl",
+])
