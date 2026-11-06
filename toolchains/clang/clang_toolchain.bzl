@@ -117,7 +117,7 @@ def _clang_toolchain_config_info_impl(ctx):
     ]
     os = "nix"
     postfix = ""
-    if ctx.host_configuration.host_path_separator == ";":
+    if ctx.configuration.host_path_separator == ";":
         os = "windows"
         postfix = ".bat"
     tool_paths = [tool_path(name = t.name, path = t.path.format(os = os) + postfix) for t in tool_paths]

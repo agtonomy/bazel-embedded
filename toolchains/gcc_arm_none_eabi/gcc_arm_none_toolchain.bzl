@@ -26,7 +26,8 @@ load(
     "tool_path",
 )
 load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "ACTION_NAMES")
-load("@com_gcc_arm_none_eabi_compiler//:defs.bzl", "SYSTEM_INCLUDE_COMMAND_LINE", "SYSTEM_INCLUDE_PATHS")
+load("@gcc_arm_none_eabi_compiler//:defs.bzl", "SYSTEM_INCLUDE_COMMAND_LINE", "SYSTEM_INCLUDE_PATHS")
+load("//devices/arm:cortex_m.bzl", "CORTEX_M_DEVICE_CONFIGS")
 load("//toolchains/features/common:defs.bzl", "GetCommonFeatures")
 load("//toolchains/features/embedded:defs.bzl", "GetEmbeddedFeatures")
 
@@ -78,50 +79,14 @@ def _get_additional_system_include_paths(ctx):
     return include_paths
 
 def _gcc_arm_none_toolchain_config_info_impl(ctx):
-    tool_paths = [
-        tool_path(
-            name = "gcc",
-            path = "gcc_wrappers/{os}/gcc",
-        ),
-        tool_path(
-            name = "ld",
-            path = "gcc_wrappers/{os}/ld",
-        ),
-        tool_path(
-            name = "ar",
-            path = "gcc_wrappers/{os}/ar",
-        ),
-        tool_path(
-            name = "cpp",
-            path = "gcc_wrappers/{os}/cpp",
-        ),
-        tool_path(
-            name = "gcov",
-            path = "gcc_wrappers/{os}/gcov",
-        ),
-        tool_path(
-            name = "nm",
-            path = "gcc_wrappers/{os}/nm",
-        ),
-        tool_path(
-            name = "objcopy",
-            path = "gcc_wrappers/{os}/objcopy",
-        ),
-        tool_path(
-            name = "objdump",
-            path = "gcc_wrappers/{os}/objdump",
-        ),
-        tool_path(
-            name = "strip",
-            path = "gcc_wrappers/{os}/strip",
-        ),
-    ]
-    os = "nix"
+    # The wrappers are generated into the compiler repository, next to the cc_toolchain that uses them.
     postfix = ""
-    if ctx.host_configuration.host_path_separator == ";":
-        os = "windows"
+    if ctx.configuration.host_path_separator == ";":
         postfix = ".bat"
-    tool_paths = [tool_path(name = t.name, path = t.path.format(os = os) + postfix) for t in tool_paths]
+    tool_paths = [
+        tool_path(name = name, path = "wrappers/" + name + postfix)
+        for name in ["gcc", "ld", "ar", "cpp", "gcov", "nm", "objcopy", "objdump", "strip"]
+    ]
 
     common_features = GetCommonFeatures(
         compiler = "GCC",
@@ -260,10 +225,6 @@ gcc_arm_none_toolchain_config = rule(
             mandatory = True,
             doc = "Indentifier used by the toolchain, this should be consistent with the cc_toolchain rule attribute",
         ),
-        "_gcc_wrappers": attr.label(
-            doc = "Passthrough gcc wrappers used for the compiler",
-            default = "//toolchains/gcc_arm_none_eabi/gcc_wrappers:all",
-        ),
     },
     provides = [CcToolchainConfigInfo],
 )
@@ -279,8 +240,7 @@ def compiler_components(system_hdr_deps, injected_hdr_deps):
     native.filegroup(
         name = "compiler_components",
         srcs = [
-            "//toolchains/gcc_arm_none_eabi/gcc_wrappers:all",
-            "@com_gcc_arm_none_eabi_compiler//:all",
+            ":all",
             ":additional_headers",
         ],
     )
@@ -312,18 +272,27 @@ def gcc_arm_none_toolchain(name, compiler_components, architecture, float_abi, e
         toolchain_identifier = "arm-none-eabi",
     )
 
-    native.toolchain(
-        name = "-".join(["cc-toolchain", architecture, fpu]),
-        exec_compatible_with = [
-            "@platforms//cpu:x86_64",
-        ],
-        target_compatible_with = [
-            "@platforms//cpu:" + architecture,
-            "//constraints/fpu:" + fpu,
-        ],
-        toolchain = ":" + name,
-        toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+def gcc_arm_none_toolchains():
+    """Declares a cc_toolchain for every cortex-m device config.
+
+    Called from the BUILD file generated into the compiler repository, which provides the `all` filegroup of the
+    compiler files and the generated wrappers. The matching toolchain() targets are in
+    //toolchains/gcc_arm_none_eabi/registry.
+    """
+    compiler_components(
+        injected_hdr_deps = "@bazel_embedded_upstream_toolchain//:injected_headers",
+        system_hdr_deps = "@bazel_embedded_upstream_toolchain//:polyfill",
     )
 
+    for cfg in CORTEX_M_DEVICE_CONFIGS:
+        gcc_arm_none_toolchain(
+            name = "arm_none_eabi_" + cfg.cpu + "_" + cfg.fpu,
+            architecture = cfg.cpu,
+            compiler_components = ":compiler_components",
+            endian = cfg.endian,
+            float_abi = cfg.float_abi,
+            fpu = cfg.fpu,
+        )
+
 def register_gcc_arm_none_toolchain():
-    native.register_toolchains("@bazel_embedded//toolchains/gcc_arm_none_eabi:all")
+    native.register_toolchains("@bazel_embedded//toolchains/gcc_arm_none_eabi/registry:all")
